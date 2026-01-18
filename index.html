@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Geoportal Bosque Protector Cutucú Shaime</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --forest-dark: #1a3a2e;
+            --forest-medium: #2d5f4c;
+            --forest-light: #4a7c59;
+            --earth-brown: #8b6f47;
+            --accent-orange: #d97626;
+            --accent-gold: #f4a460;
+            --sky-blue: #87CEEB;
+            --neutral-light: #f5f3ed;
+            --neutral-dark: #2a2a2a;
+        }
+        body { font-family: 'Work Sans', sans-serif; background: linear-gradient(135deg, var(--forest-dark) 0%, var(--forest-medium) 100%); color: var(--neutral-dark); overflow-x: hidden; }
+        header { background: rgba(26, 58, 46, 0.95); backdrop-filter: blur(10px); padding: 1.5rem 2rem; border-bottom: 3px solid var(--accent-orange); position: relative; overflow: hidden; }
+        header::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent-gold) 0%, var(--accent-orange) 50%, var(--earth-brown) 100%); }
+        h1 { font-family: 'Crimson Pro', serif; font-size: 2.5rem; font-weight: 700; color: var(--neutral-light); text-align: center; letter-spacing: -0.5px; margin-bottom: 0.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+        .subtitle { text-align: center; color: var(--accent-gold); font-size: 0.95rem; font-weight: 500; letter-spacing: 0.5px; }
+        .container { display: flex; height: calc(100vh - 120px); gap: 1rem; padding: 1rem; }
+        .sidebar { width: 380px; background: var(--neutral-light); border-radius: 12px; padding: 1.5rem; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); }
+        .sidebar::-webkit-scrollbar { width: 8px; }
+        .sidebar::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); border-radius: 4px; }
+        .sidebar::-webkit-scrollbar-thumb { background: var(--forest-medium); border-radius: 4px; }
+        .section { margin-bottom: 2rem; }
+        .section-title { font-family: 'Crimson Pro', serif; font-size: 1.4rem; font-weight: 700; color: var(--forest-dark); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--accent-orange); display: flex; align-items: center; gap: 0.5rem; }
+        .section-title::before { content: ''; width: 4px; height: 24px; background: var(--accent-orange); border-radius: 2px; }
+        .layer-group { margin-bottom: 1.5rem; }
+        .layer-group-title { font-weight: 600; color: var(--forest-medium); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+        .layer-item { display: flex; align-items: center; padding: 0.6rem 0.8rem; margin-bottom: 0.5rem; background: white; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); transition: all 0.2s ease; cursor: pointer; }
+        .layer-item:hover { transform: translateX(4px); border-color: var(--accent-orange); box-shadow: 0 4px 12px rgba(217, 118, 38, 0.15); }
+        .layer-item input[type="checkbox"] { margin-right: 0.8rem; cursor: pointer; width: 18px; height: 18px; accent-color: var(--forest-medium); }
+        .layer-item label { cursor: pointer; flex: 1; font-size: 0.9rem; color: var(--neutral-dark); }
+        .layer-color { width: 24px; height: 24px; border-radius: 4px; border: 2px solid rgba(0,0,0,0.1); margin-left: auto; }
+        .analysis-btn { width: 100%; padding: 1rem 1.5rem; margin-bottom: 0.75rem; background: linear-gradient(135deg, var(--forest-medium) 0%, var(--forest-light) 100%); color: white; border: none; border-radius: 10px; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.15); position: relative; overflow: hidden; }
+        .analysis-btn::before { content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent); transition: left 0.5s; }
+        .analysis-btn:hover::before { left: 100%; }
+        .analysis-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
+        .analysis-btn:active { transform: translateY(0); }
+        .map-container { flex: 1; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.3); border: 2px solid rgba(255,255,255,0.1); }
+        #map { height: 100%; width: 100%; }
+        .results-panel { position: fixed; bottom: 2rem; right: 2rem; max-width: 550px; max-height: 500px; background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3); overflow-y: auto; z-index: 1000; display: none; border-top: 4px solid var(--accent-orange); }
+        .results-panel.show { display: block; animation: slideUp 0.4s ease; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 2px solid var(--neutral-light); }
+        .results-title { font-family: 'Crimson Pro', serif; font-size: 1.3rem; font-weight: 700; color: var(--forest-dark); }
+        .close-btn { background: var(--accent-orange); color: white; border: none; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .close-btn:hover { background: var(--earth-brown); transform: rotate(90deg); }
+        .results-content { font-size: 0.9rem; line-height: 1.6; }
+        .result-item { padding: 0.75rem; margin-bottom: 0.5rem; background: var(--neutral-light); border-radius: 6px; border-left: 3px solid var(--accent-orange); }
+        .result-item strong { color: var(--forest-dark); }
+        .loading { display: none; text-align: center; padding: 2rem; }
+        .loading.show { display: block; }
+        .spinner { border: 4px solid rgba(0,0,0,0.1); border-radius: 50%; border-top: 4px solid var(--accent-orange); width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+        .stat-card { background: white; padding: 1rem; border-radius: 8px; border-left: 4px solid var(--accent-orange); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .stat-number { font-size: 2rem; font-weight: 700; color: var(--forest-dark); font-family: 'Crimson Pro', serif; }
+        .stat-label { font-size: 0.8rem; color: var(--neutral-dark); opacity: 0.7; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 0.25rem; }
+        .basemap-control { position: absolute; top: 10px; right: 10px; z-index: 1000; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); padding: 8px; }
+        .basemap-btn { display: block; padding: 8px 12px; margin: 2px 0; border: none; background: white; cursor: pointer; border-radius: 4px; font-size: 0.85rem; transition: all 0.2s; }
+        .basemap-btn:hover { background: var(--neutral-light); }
+        .basemap-btn.active { background: var(--forest-medium); color: white; }
+        #chartCanvas { max-width: 300px; margin: 1rem auto; }
+        @media (max-width: 1200px) { .container { flex-direction: column; } .sidebar { width: 100%; max-height: 300px; } }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Geoportal Bosque Protector Cutucú Shaime</h1>
+        <p class="subtitle">Sistema de Información Territorial - Morona Santiago, Ecuador</p>
+    </header>
+
+    <div class="container">
+        <aside class="sidebar">
+            <div class="section">
+                <h2 class="section-title">Capas Geográficas</h2>
+                
+                <div class="layer-group">
+                    <div class="layer-group-title">🌳 Conservación</div>
+                    <div class="layer-item">
+                        <input type="checkbox" id="layer-bpks" checked>
+                        <label for="layer-bpks">Bosque Protector Cutucú Shaime</label>
+                        <div class="layer-color" style="background: #2d5f4c;"></div>
+                    </div>
+                    <div class="layer-item">
+                        <input type="checkbox" id="layer-sociobosque">
+                        <label for="layer-sociobosque">Socio Bosque</label>
+                        <div class="layer-color" style="background: #4a7c59;"></div>
+                    </div>
+                </div>
+
+                <div class="layer-group">
+                    <div class="layer-group-title">⛏️ Extractivas</div>
+                    <div class="layer-item">
+                        <input type="checkbox" id="layer-bloques">
+                        <label for="layer-bloques">Bloques Petroleros</label>
+                        <div class="layer-color" style="background: #d97626;"></div>
+                    </div>
+                    <div class="layer-item">
+                        <input type="checkbox" id="layer-minero">
+                        <label for="layer-minero">Catastro Minero</label>
+                        <div class="layer-color" style="background: #f4a460;"></div>
+                    </div>
+                </div>
+
+                <div class="layer-group">
+                    <div class="layer-group-title">🏛️ Administrativas</div>
+                    <div class="layer-item">
+                        <input type="checkbox" id="layer-provincia">
+                        <label for="layer-provincia">Provincia Morona Santiago</label>
+                        <div class="layer-color" style="background: rgba(0,0,0,0.2);"></div>
+                    </div>
+                    <div class="layer-item">
+                        <input type="checkbox" id="layer-cantones">
+                        <label for="layer-cantones">Cantones</label>
+                        <div class="layer-color" style="background: rgba(0,0,0,0.15);"></div>
+                    </div>
+                    <div class="layer-item">
+                        <input type="checkbox" id="layer-parroquias">
+                        <label for="layer-parroquias">Parroquias</label>
+                        <div class="layer-color" style="background: rgba(0,0,0,0.1);"></div>
+                    </div>
+                </div>
+
+                <div class="layer-group">
+                    <div class="layer-group-title">👥 Social</div>
+                    <div class="layer-item">
+                        <input type="checkbox" id="layer-comunidades-punto" checked>
+                        <label for="layer-comunidades-punto">Comunidades (Puntos)</label>
+                        <div class="layer-color" style="background: #87CEEB;"></div>
+                    </div>
+                    <div class="layer-item">
+                        <input type="checkbox" id="layer-comunidades-polig">
+                        <label for="layer-comunidades-polig">Límites Comunitarios</label>
+                        <div class="layer-color" style="background: rgba(135, 206, 235, 0.4);"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title">Consultas Espaciales</h2>
+                <button class="analysis-btn" onclick="ejecutarConsulta1()">📍 Comunidades dentro del BPCS</button>
+                <button class="analysis-btn" onclick="ejecutarConsulta2()">⚠️ Triple Superposición: Minería + Petróleo en BPCS</button>
+                <button class="analysis-btn" onclick="ejecutarConsulta6()">🌲 Socio Bosque dentro del BPCS</button>
+                <button class="analysis-btn" onclick="ejecutarConsulta3()">📊 Parroquias dentro del BPCS</button>
+                <button class="analysis-btn" onclick="ejecutarConsulta4()">📈 Cantones dentro del BPCS</button>
+                <button class="analysis-btn" onclick="ejecutarConsulta5()">📋 Resumen Presión Extractiva BPCS</button>
+            </div>
+        </aside>
+
+        <main class="map-container">
+            <div id="map">
+                <div class="basemap-control">
+                    <button class="basemap-btn active" onclick="cambiarMapa('osm')">🗺️ Mapa</button>
+                    <button class="basemap-btn" onclick="cambiarMapa('satellite')">🛰️ Satélite</button>
+                    <button class="basemap-btn" onclick="cambiarMapa('terrain')">⛰️ Relieve</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div class="results-panel" id="resultsPanel">
+        <div class="results-header">
+            <h3 class="results-title" id="resultsTitle">Resultados</h3>
+            <button class="close-btn" onclick="cerrarResultados()">×</button>
+        </div>
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Procesando consulta...</p>
+        </div>
+        <div class="results-content" id="resultsContent"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const SUPABASE_URL = 'https://lmbqvfjffkbstzmjjqgo.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxtYnF2ZmpmZmtic3R6bWpqcWdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY2MDM2NzYsImV4cCI6MjA4MjE3OTY3Nn0.3xZL_q5JpkBy-VUlI6GYNOJmn6meWUZ9paihhaPO7mo';
+
+        const map = L.map('map').setView([-2.4, -77.8], 9);
+
+        const basemaps = {
+            osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }),
+            satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri' }),
+            terrain: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { attribution: '© OpenTopoMap' })
+        };
+
+        let currentBasemap = basemaps.osm.addTo(map);
+
+        function cambiarMapa(tipo) {
+            map.removeLayer(currentBasemap);
+            currentBasemap = basemaps[tipo];
+            currentBasemap.addTo(map);
+            document.querySelectorAll('.basemap-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        const layerGroups = {};
+        let highlightLayer = null;
+        let bpksGeometry = null;
+
+        async function cargarCapa(nombre, tabla, color, tipo, campos) {
+            if (layerGroups[nombre]) return layerGroups[nombre];
+            
+            const group = L.layerGroup();
+            let offset = 0;
+            const limit = 1000;
+            let hasMore = true;
+            const maxRecords = nombre === 'Geopedología' ? 5000 : 10000;
+            let count = 0;
+
+            while (hasMore && count < maxRecords) {
+                const selectFields = ['id', ...campos, 'geom'].join(',');
+                const url = `${SUPABASE_URL}/rest/v1/${tabla}?select=${selectFields}&limit=${limit}&offset=${offset}`;
+                
+                const response = await fetch(url, {
+                    headers: {
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    }
+                });
+                
+                if (!response.ok) break;
+                const data = await response.json();
+                if (data.length === 0) break;
+                
+                data.forEach(item => {
+                    if (item.geom) {
+                        try {
+                            const geojson = typeof item.geom === 'string' ? JSON.parse(item.geom) : item.geom;
+                            
+                            if (tipo === 'point') {
+                                const coords = geojson.coordinates;
+                                const marker = L.circleMarker([coords[1], coords[0]], {
+                                    radius: 6,
+                                    fillColor: color,
+                                    color: '#fff',
+                                    weight: 1,
+                                    fillOpacity: 0.8
+                                });
+                                let popup = '<div style="font-size:13px;">';
+                                campos.forEach(field => {
+                                    if (item[field]) popup += `<b>${field}:</b> ${item[field]}<br>`;
+                                });
+                                popup += '</div>';
+                                marker.bindPopup(popup);
+                                marker.addTo(group);
+                            } else {
+                                const layer = L.geoJSON(geojson, {
+                                    style: {
+                                        fillColor: color,
+                                        weight: nombre === 'Geopedología' ? 0.5 : 2,
+                                        color: color,
+                                        fillOpacity: nombre === 'Geopedología' ? 0.15 : 0.3
+                                    }
+                                });
+                                let popup = '<div style="font-size:13px;">';
+                                campos.forEach(field => {
+                                    if (item[field]) popup += `<b>${field}:</b> ${item[field]}<br>`;
+                                });
+                                popup += '</div>';
+                                layer.bindPopup(popup);
+                                layer.addTo(group);
+                            }
+                            count++;
+                        } catch (e) {
+                            console.error('Error geometría:', e);
+                        }
+                    }
+                });
+                
+                offset += limit;
+                if (data.length < limit) hasMore = false;
+            }
+            
+            layerGroups[nombre] = group;
+            return group;
+        }
+
+        async function obtenerBPKSGeometry() {
+            if (bpksGeometry) return bpksGeometry;
+            
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/bpks_ms_geo?select=*`, {
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                }
+            });
+            const data = await response.json();
+            const bpks = data.find(b => b.nombre && (b.nombre.toLowerCase().includes('kutuku') || b.nombre.toLowerCase().includes('shaimi')));
+            
+            if (bpks && bpks.geom) {
+                bpksGeometry = typeof bpks.geom === 'string' ? JSON.parse(bpks.geom) : bpks.geom;
+            }
+            
+            return bpksGeometry;
+        }
+
+        function puntoEnPoligono(punto, poligono) {
+            const pt = turf.point(punto);
+            const poly = turf.polygon(poligono.coordinates);
+            return turf.booleanPointInPolygon(pt, poly);
+        }
+
+        function intersecta(geom1, geom2) {
+            try {
+                const feature1 = geom1.type === 'Feature' ? geom1 : turf.feature(geom1);
+                const feature2 = geom2.type === 'Feature' ? geom2 : turf.feature(geom2);
+                return turf.booleanIntersects(feature1, feature2);
+            } catch (e) {
+                return false;
+            }
+        }
+
+        document.getElementById('layer-bpks').addEventListener('change', async function() {
+            if (this.checked) {
+                const layer = await cargarCapa('BPKS', 'bpks_ms_geo', '#2d5f4c', 'polygon', ['nombre', 'ubicacion', 'area_ha']);
+                layer.addTo(map);
+            } else {
+                map.removeLayer(layerGroups['BPKS']);
+            }
+        });
+
+        document.getElementById('layer-sociobosque').addEventListener('change', async function() {
+            if (this.checked) {
+                const layer = await cargarCapa('Socio Bosque', 'socio_bosque_ms_geo', '#4a7c59', 'polygon', ['nam', 'tpcnv', 'are']);
+                layer.addTo(map);
+            } else {
+                map.removeLayer(layerGroups['Socio Bosque']);
+            }
+        });
+
+        document.getElementById('layer-bloques').addEventListener('change', async function() {
+            if (this.checked) {
+                const layer = await cargarCapa('Bloques', 'bloques_petroleros_ms_geo', '#d97626', 'polygon', ['NOMBRE', 'OPERAD', 'CUENCA', 'Tipo']);
+                layer.addTo(map);
+            } else {
+                map.removeLayer(layerGroups['Bloques']);
+            }
+        });
+
+        document.getElementById('layer-minero').addEventListener('change', async function() {
+            if (this.checked) {
+                const layer = await cargarCapa('Minero', 'catastro_minero_ms_2019_geo', '#f4a460', 'polygon', ['nam', 'tipo_miner', 'dpa_despro', 'dpa_descan']);
+                layer.addTo(map);
+            } else {
+                map.removeLayer(layerGroups['Minero']);
+            }
+        });
+
+        document.getElementById('layer-provincia').addEventListener('change', async function() {
+            if (this.checked) {
+                const layer = await cargarCapa('Provincia', 'poligono_ms_geo', 'rgba(0,0,0,0.2)', 'polygon', ['DPA_DESPRO']);
+                layer.addTo(map);
+            } else {
+                map.removeLayer(layerGroups['Provincia']);
+            }
+        });
+
+        document.getElementById('layer-cantones').addEventListener('change', async function() {
+            if (this.checked) {
+                const layer = await cargarCapa('Cantones', 'cantones_ms_geo', 'rgba(0,0,0,0.15)', 'polygon', ['DPA_DESCAN', 'DPA_DESPRO']);
+                layer.addTo(map);
+            } else {
+                map.removeLayer(layerGroups['Cantones']);
+            }
+        });
+
+        document.getElementById('layer-parroquias').addEventListener('change', async function() {
+            if (this.checked) {
+                const layer = await cargarCapa('Parroquias', 'parroquias_ms_geo', 'rgba(0,0,0,0.1)', 'polygon', ['DPA_DESPAR', 'DPA_DESCAN', 'DPA_DESPRO']);
+                layer.addTo(map);
+            } else {
+                map.removeLayer(layerGroups['Parroquias']);
+            }
+        });
+
+        document.getElementById('layer-comunidades-punto').addEventListener('change', async function() {
+            if (this.checked) {
+                const layer = await cargarCapa('Comunidades Punto', 'comunidades_bpks_geo', '#87CEEB', 'point', ['Name', 'Etnia', 'Canton', 'Parroquia']);
+                layer.addTo(map);
+            } else {
+                map.removeLayer(layerGroups['Comunidades Punto']);
+            }
+        });
+
+        document.getElementById('layer-comunidades-polig').addEventListener('change', async function() {
+            if (this.checked) {
+                const layer = await cargarCapa('Comunidades Polig', 'comunidades_bpks_mae_2020_geo', 'rgba(135, 206, 235, 0.4)', 'polygon', ['Name', 'TIPO_ADJ', 'Etnia']);
+                layer.addTo(map);
+            } else {
+                map.removeLayer(layerGroups['Comunidades Polig']);
+            }
+        });
+
+        function limpiarGeometria(geojson) {
+            try {
+                // Si es MultiPolygon, convertir a Polygon tomando el primer polígono
+                if (geojson.type === 'MultiPolygon') {
+                    return {
+                        type: 'Polygon',
+                        coordinates: geojson.coordinates[0]
+                    };
+                }
+                return geojson;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function validarGeometria(geojson) {
+            try {
+                if (!geojson || !geojson.type || !geojson.coordinates) return false;
+                
+                if (geojson.type === 'Polygon') {
+                    if (!Array.isArray(geojson.coordinates) || geojson.coordinates.length === 0) return false;
+                    const ring = geojson.coordinates[0];
+                    if (!Array.isArray(ring) || ring.length < 4) return false;
+                }
+                
+                if (geojson.type === 'MultiPolygon') {
+                    if (!Array.isArray(geojson.coordinates) || geojson.coordinates.length === 0) return false;
+                    for (const poly of geojson.coordinates) {
+                        if (!Array.isArray(poly) || poly.length === 0) return false;
+                        const ring = poly[0];
+                        if (!Array.isArray(ring) || ring.length < 4) return false;
+                    }
+                }
+                
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function crearTurfPolygon(geojson) {
+            try {
+                const geomLimpia = limpiarGeometria(geojson);
+                if (!geomLimpia || !validarGeometria(geomLimpia)) return null;
+                
+                if (geomLimpia.type === 'Polygon') {
+                    return turf.polygon(geomLimpia.coordinates);
+                }
+                
+                return null;
+            } catch (e) {
+                console.error('Error creando polígono Turf:', e);
+                return null;
+            }
+        }
+
+        async function ejecutarConsulta1() {
+            mostrarLoading();
+            
+            try {
+                if (highlightLayer) map.removeLayer(highlightLayer);
+                highlightLayer = L.layerGroup().addTo(map);
+
+                const bpksGeom = await obtenerBPKSGeometry();
+                const bpksPoly = crearTurfPolygon(bpksGeom);
+                
+                if (!bpksPoly) {
+                    mostrarResultados('Error', '<div class="result-item">No se pudo cargar el polígono BPKS o tiene geometría inválida</div>');
+                    return;
+                }
+
+                L.geoJSON(bpksGeom, {
+                    style: { fillColor: '#FFD700', weight: 3, color: '#FFD700', fillOpacity: 0.2 }
+                }).addTo(highlightLayer);
+
+                const comunidades = await fetch(`${SUPABASE_URL}/rest/v1/comunidades_bpks_geo?select=*`, {
+                    headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+                }).then(r => r.json());
+
+                const comunidadesDentro = [];
+
+                comunidades.forEach(com => {
+                    if (com.geom) {
+                        try {
+                            const comGeom = typeof com.geom === 'string' ? JSON.parse(com.geom) : com.geom;
+                            const coords = comGeom.coordinates;
+                            const pt = turf.point(coords);
+                            
+                            if (turf.booleanPointInPolygon(pt, bpksPoly)) {
+                                comunidadesDentro.push(com);
+                                L.circleMarker([coords[1], coords[0]], {
+                                    radius: 10,
+                                    fillColor: '#FF6B00',
+                                    color: '#FFD700',
+                                    weight: 3,
+                                    fillOpacity: 0.9
+                                }).bindPopup(`<b>${com.Name}</b><br>Etnia: ${com.Etnia || 'N/A'}`).addTo(highlightLayer);
+                            }
+                        } catch (e) {
+                            console.error('Error procesando comunidad:', e);
+                        }
+                    }
+                });
+
+                let html = `<div class="result-item"><strong>Comunidades dentro del BPCS:</strong> ${comunidadesDentro.length}</div>`;
+                html += '<div style="max-height:250px;overflow-y:auto;margin-top:1rem;">';
+                comunidadesDentro.forEach((com, i) => {
+                    html += `<div class="result-item">${i+1}. <strong>${com.Name}</strong><br>Etnia: ${com.Etnia || 'N/A'}<br>Cantón: ${com.Canton || 'N/A'}</div>`;
+                });
+                html += '</div>';
+
+                mostrarResultados('Comunidades dentro del BPCS', html);
+            } catch (error) {
+                console.error('Error en consulta 1:', error);
+                mostrarResultados('Error', `<div class="result-item">Error: ${error.message}</div>`);
+            }
+        }
+
+        async function ejecutarConsulta2() {
+            mostrarLoading();
+            
+            try {
+                if (highlightLayer) map.removeLayer(highlightLayer);
+                highlightLayer = L.layerGroup().addTo(map);
+
+                const bpksGeom = await obtenerBPKSGeometry();
+                const bpksPoly = crearTurfPolygon(bpksGeom);
+                
+                if (!bpksPoly) {
+                    mostrarResultados('Error', '<div class="result-item">No se pudo cargar el polígono BPCS</div>');
+                    return;
+                }
+
+                L.geoJSON(bpksGeom, {
+                    style: { fillColor: '#2d5f4c', weight: 3, color: '#2d5f4c', fillOpacity: 0.15 }
+                }).addTo(highlightLayer);
+
+                const minero = await fetch(`${SUPABASE_URL}/rest/v1/catastro_minero_ms_2019_geo?select=*`, {
+                    headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+                }).then(r => r.json());
+
+                const bloques = await fetch(`${SUPABASE_URL}/rest/v1/bloques_petroleros_ms_geo?select=*`, {
+                    headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+                }).then(r => r.json());
+
+                const mineroEnBPKS = [];
+                const bloquesEnBPKS = [];
+                let areaMinera = 0;
+                let areaPetrolera = 0;
+
+                minero.forEach(m => {
+                    if (m.geom) {
+                        try {
+                            const geom = typeof m.geom === 'string' ? JSON.parse(m.geom) : m.geom;
+                            const poly = crearTurfPolygon(geom);
+                            if (!poly) return;
+                            
+                            if (turf.booleanIntersects(poly, bpksPoly)) {
+                                mineroEnBPKS.push(m);
+                                
+                                try {
+                                    const intersection = turf.intersect(poly, bpksPoly);
+                                    if (intersection) {
+                                        const area = turf.area(intersection) / 1000000;
+                                        areaMinera += area;
+                                        
+                                        // Visualizar SOLO la intersección, no el polígono completo
+                                        L.geoJSON(intersection, {
+                                            style: { fillColor: '#00ff88', weight: 2, color: '#00cc66', fillOpacity: 0.7 }
+                                        }).addTo(highlightLayer);
+                                    }
+                                } catch (e) {
+                                    console.warn('No se pudo calcular intersección:', e);
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Error procesando minería:', e);
+                        }
+                    }
+                });
+
+                bloques.forEach(b => {
+                    if (b.geom) {
+                        try {
+                            const geom = typeof b.geom === 'string' ? JSON.parse(b.geom) : b.geom;
+                            const poly = crearTurfPolygon(geom);
+                            if (!poly) return;
+                            
+                            if (turf.booleanIntersects(poly, bpksPoly)) {
+                                bloquesEnBPKS.push(b);
+                                
+                                try {
+                                    const intersection = turf.intersect(poly, bpksPoly);
+                                    if (intersection) {
+                                        const area = turf.area(intersection) / 1000000;
+                                        areaPetrolera += area;
+                                        
+                                        // Visualizar SOLO la intersección, no el polígono completo
+                                        L.geoJSON(intersection, {
+                                            style: { fillColor: '#6c757d', weight: 2, color: '#495057', fillOpacity: 0.7 }
+                                        }).addTo(highlightLayer);
+                                    }
+                                } catch (e) {
+                                    console.warn('No se pudo calcular intersección:', e);
+                                }
+                            }
+                        } catch (e) {
+                            console.error('Error procesando petróleo:', e);
+                        }
+                    }
+                });
+
+                let html = '<div class="stats-grid">';
+                html += `<div class="stat-card"><div class="stat-number">${mineroEnBPKS.length}</div><div class="stat-label">Concesiones Mineras</div></div>`;
+                html += `<div class="stat-card"><div class="stat-number">${bloquesEnBPKS.length}</div><div class="stat-label">Bloques Petroleros</div></div>`;
+                html += `<div class="stat-card"><div class="stat-number">${areaMinera.toFixed(2)}</div><div class="stat-label">km² Minería en BPCS</div></div>`;
+                html += `<div class="stat-card"><div class="stat-number">${areaPetrolera.toFixed(2)}</div><div class="stat-label">km² Petróleo en BPCS</div></div>`;
+                html += '</div>';
+
+                html += '<div style="margin-top:1rem;"><strong>Distribución de Áreas en BPCS:</strong></div>';
+                html += '<canvas id="chartCanvas" style="max-width:300px;margin:1.5rem auto;"></canvas>';
+                
+                mostrarResultados('Triple Superposición en BPCS', html);
+
+                setTimeout(() => {
+                    const ctx = document.getElementById('chartCanvas').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: [`Minería (${areaMinera.toFixed(2)} km²)`, `Petróleo (${areaPetrolera.toFixed(2)} km²)`],
+                            datasets: [{
+                                data: [areaMinera, areaPetrolera],
+                                backgroundColor: ['#00ff88', '#6c757d']
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: { position: 'bottom', labels: { font: { size: 11 } } }
+                            }
+                        }
+                    });
+                }, 100);
+            } catch (error) {
+                console.error('Error en consulta 2:', error);
+                mostrarResultados('Error', `<div class="result-item">Error: ${error.message}</div>`);
+            }
+        }
+
+        async function ejecutarConsulta3() {
+            mostrarLoading();
+            
+            try {
+                if (highlightLayer) map.removeLayer(highlightLayer);
+                highlightLayer = L.layerGroup().addTo(map);
+
+                const bpksGeom = await obtenerBPKSGeometry();
+                if (!bpksGeom || !validarGeometria(bpksGeom)) {
+                    mostrarResultados('Error', '<div class="result-item">No se pudo cargar el polígono BPCS</div>');
+                    return;
+                }
+
+                const parroquias = await fetch(`${SUPABASE_URL}/rest/v1/parroquias_ms_geo?select=*`, {
+                    headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+                }).then(r => r.json());
+
+                const parroquiasEnBPKS = [];
+                const bpksPoly = crearTurfPolygon(bpksGeom);
+                if (!bpksPoly) {
+                    mostrarResultados('Error', '<div class="result-item">Error creando polígono BPCS</div>');
+                    return;
+                }
+
+                parroquias.forEach(p => {
+                    if (p.geom) {
+                        try {
+                            const geom = typeof p.geom === 'string' ? JSON.parse(p.geom) : p.geom;
+                            const poly = crearTurfPolygon(geom);
+                            if (!poly) return;
+                            
+                            if (turf.booleanIntersects(poly, bpksPoly)) {
+                                parroquiasEnBPKS.push(p);
+                                L.geoJSON(geom, {
+                                    style: { fillColor: '#87CEEB', weight: 2, color: '#4a7c59', fillOpacity: 0.3 }
+                                }).addTo(highlightLayer);
+                            }
+                        } catch (e) {
+                            console.error('Error procesando parroquia:', e);
+                        }
+                    }
+                });
+
+                L.geoJSON(bpksGeom, {
+                    style: { fillColor: 'transparent', weight: 3, color: '#FFD700', fillOpacity: 0 }
+                }).addTo(highlightLayer);
+
+                let html = `<div class="result-item"><strong>Total Parroquias en BPCS:</strong> ${parroquiasEnBPKS.length}</div>`;
+                html += '<div style="max-height:250px;overflow-y:auto;margin-top:1rem;">';
+                parroquiasEnBPKS.forEach((p, i) => {
+                    html += `<div class="result-item">${i+1}. <strong>${p.DPA_DESPAR || 'Sin nombre'}</strong><br>Cantón: ${p.DPA_DESCAN || 'N/A'}</div>`;
+                });
+                html += '</div>';
+
+                mostrarResultados('Parroquias dentro del BPCS', html);
+            } catch (error) {
+                console.error('Error en consulta 3:', error);
+                mostrarResultados('Error', `<div class="result-item">Error: ${error.message}</div>`);
+            }
+        }
+
+        async function ejecutarConsulta4() {
+            mostrarLoading();
+            
+            try {
+                if (highlightLayer) map.removeLayer(highlightLayer);
+                highlightLayer = L.layerGroup().addTo(map);
+
+                const bpksGeom = await obtenerBPKSGeometry();
+                if (!bpksGeom || !validarGeometria(bpksGeom)) {
+                    mostrarResultados('Error', '<div class="result-item">No se pudo cargar el polígono BPCS</div>');
+                    return;
+                }
+
+                const cantones = await fetch(`${SUPABASE_URL}/rest/v1/cantones_ms_geo?select=*`, {
+                    headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+                }).then(r => r.json());
+
+                const cantonesEnBPKS = [];
+                const bpksPoly = crearTurfPolygon(bpksGeom);
+                if (!bpksPoly) {
+                    mostrarResultados('Error', '<div class="result-item">Error creando polígono BPCS</div>');
+                    return;
+                }
+
+                cantones.forEach(c => {
+                    if (c.geom) {
+                        try {
+                            const geom = typeof c.geom === 'string' ? JSON.parse(c.geom) : c.geom;
+                            const poly = crearTurfPolygon(geom);
+                            if (!poly) return;
+                            
+                            if (turf.booleanIntersects(poly, bpksPoly)) {
+                                cantonesEnBPKS.push(c);
+                                L.geoJSON(geom, {
+                                    style: { fillColor: '#4a7c59', weight: 2, color: '#2d5f4c', fillOpacity: 0.25 }
+                                }).addTo(highlightLayer);
+                            }
+                        } catch (e) {
+                            console.error('Error procesando cantón:', e);
+                        }
+                    }
+                });
+
+                L.geoJSON(bpksGeom, {
+                    style: { fillColor: 'transparent', weight: 3, color: '#FFD700', fillOpacity: 0 }
+                }).addTo(highlightLayer);
+
+                let html = `<div class="result-item"><strong>Total Cantones en BPCS:</strong> ${cantonesEnBPKS.length}</div>`;
+                html += '<div class="stats-grid" style="margin-top:1rem;">';
+                cantonesEnBPKS.forEach(c => {
+                    html += `<div class="stat-card"><div class="stat-number">${c.DPA_DESCAN || 'Sin nombre'}</div><div class="stat-label">Cantón</div></div>`;
+                });
+                html += '</div>';
+
+                mostrarResultados('Cantones dentro del BPCS', html);
+            } catch (error) {
+                console.error('Error en consulta 4:', error);
+                mostrarResultados('Error', `<div class="result-item">Error: ${error.message}</div>`);
+            }
+        }
+
+        async function ejecutarConsulta5() {
+            mostrarLoading();
+            
+            try {
+                if (highlightLayer) map.removeLayer(highlightLayer);
+                highlightLayer = L.layerGroup().addTo(map);
+
+                const bpksGeom = await obtenerBPKSGeometry();
+                if (!bpksGeom || !validarGeometria(bpksGeom)) {
+                    mostrarResultados('Error', '<div class="result-item">No se pudo cargar el polígono BPCS</div>');
+                    return;
+                }
+
+                const minero = await fetch(`${SUPABASE_URL}/rest/v1/catastro_minero_ms_2019_geo?select=*`, {
+                    headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+                }).then(r => r.json());
+
+                const bloques = await fetch(`${SUPABASE_URL}/rest/v1/bloques_petroleros_ms_geo?select=*`, {
+                    headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+                }).then(r => r.json());
+
+                L.geoJSON(bpksGeom, {
+                    style: { fillColor: '#2d5f4c', weight: 3, color: '#2d5f4c', fillOpacity: 0.2 }
+                }).addTo(highlightLayer);
+
+                const mineroEnBPKS = [];
+                const bloquesEnBPKS = [];
+                let areaMinera = 0;
+                let areaPetrolera = 0;
+
+                const bpksPoly = crearTurfPolygon(bpksGeom);
+                if (!bpksPoly) {
+                    mostrarResultados('Error', '<div class="result-item">Error creando polígono BPCS</div>');
+                    return;
+                }
+
+                minero.forEach(m => {
+                    if (m.geom) {
+                        try {
+                            const geom = typeof m.geom === 'string' ? JSON.parse(m.geom) : m.geom;
+                            const poly = crearTurfPolygon(geom);
+                            if (!poly) return;
+                            
+                            if (turf.booleanIntersects(poly, bpksPoly)) {
+                                mineroEnBPKS.push(m);
+                                
+                                // Calcular área de intersección
+                                try {
+                                    const intersection = turf.intersect(poly, bpksPoly);
+                                    if (intersection) {
+                                        const area = turf.area(intersection) / 1000000; // m² a km²
+                                        areaMinera += area;
+                                    }
+                                } catch (e) {
+                                    console.warn('No se pudo calcular intersección:', e);
+                                }
+                                
+                                L.geoJSON(geom, {
+                                    style: { fillColor: '#f4a460', weight: 1, color: '#f4a460', fillOpacity: 0.4 }
+                                }).addTo(highlightLayer);
+                            }
+                        } catch (e) {
+                            console.error('Error procesando minería:', e);
+                        }
+                    }
+                });
+
+                bloques.forEach(b => {
+                    if (b.geom) {
+                        try {
+                            const geom = typeof b.geom === 'string' ? JSON.parse(b.geom) : b.geom;
+                            const poly = crearTurfPolygon(geom);
+                            if (!poly) return;
+                            
+                            if (turf.booleanIntersects(poly, bpksPoly)) {
+                                bloquesEnBPKS.push(b);
+                                
+                                // Calcular área de intersección
+                                try {
+                                    const intersection = turf.intersect(poly, bpksPoly);
+                                    if (intersection) {
+                                        const area = turf.area(intersection) / 1000000; // m² a km²
+                                        areaPetrolera += area;
+                                    }
+                                } catch (e) {
+                                    console.warn('No se pudo calcular intersección:', e);
+                                }
+                                
+                                L.geoJSON(geom, {
+                                    style: { fillColor: '#d97626', weight: 1, color: '#d97626', fillOpacity: 0.3 }
+                                }).addTo(highlightLayer);
+                            }
+                        } catch (e) {
+                            console.error('Error procesando petróleo:', e);
+                        }
+                    }
+                });
+
+                let html = '<div class="stats-grid">';
+                html += `<div class="stat-card"><div class="stat-number">${mineroEnBPKS.length}</div><div class="stat-label">Concesiones Mineras en BPCS</div></div>`;
+                html += `<div class="stat-card"><div class="stat-number">${bloquesEnBPKS.length}</div><div class="stat-label">Bloques Petroleros en BPCS</div></div>`;
+                html += '</div>';
+
+                html += '<div style="margin-top:1rem;">';
+                html += `<div class="result-item"><strong>Área Minera en BPCS:</strong> ${areaMinera.toFixed(2)} km²</div>`;
+                html += `<div class="result-item"><strong>Área Petrolera en BPCS:</strong> ${areaPetrolera.toFixed(2)} km²</div>`;
+                html += `<div class="result-item"><strong>Área Total de Presión:</strong> ${(areaMinera + areaPetrolera).toFixed(2)} km²</div>`;
+                html += '</div>';
+
+                mostrarResultados('Resumen Presión Extractiva BPKS', html);
+            } catch (error) {
+                console.error('Error en consulta 5:', error);
+                mostrarResultados('Error', `<div class="result-item">Error: ${error.message}</div>`);
+            }
+        }
+
+        async function ejecutarConsulta6() {
+            mostrarLoading();
+            
+            try {
+                if (highlightLayer) map.removeLayer(highlightLayer);
+                highlightLayer = L.layerGroup().addTo(map);
+
+                const bpksGeom = await obtenerBPKSGeometry();
+                const bpksPoly = crearTurfPolygon(bpksGeom);
+                
+                if (!bpksPoly) {
+                    mostrarResultados('Error', '<div class="result-item">No se pudo cargar el polígono BPCS</div>');
+                    return;
+                }
+
+                L.geoJSON(bpksGeom, {
+                    style: { fillColor: '#2d5f4c', weight: 3, color: '#2d5f4c', fillOpacity: 0.2 }
+                }).addTo(highlightLayer);
+
+                const socioBosque = await fetch(`${SUPABASE_URL}/rest/v1/socio_bosque_ms_geo?select=*`, {
+                    headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+                }).then(r => r.json());
+
+                const socioBosqueEnBPKS = [];
+                let areaTotal = 0;
+
+                socioBosque.forEach(sb => {
+                    if (sb.geom) {
+                        try {
+                            const geom = typeof sb.geom === 'string' ? JSON.parse(sb.geom) : sb.geom;
+                            const poly = crearTurfPolygon(geom);
+                            if (!poly) return;
+                            
+                            if (turf.booleanIntersects(poly, bpksPoly)) {
+                                let areaEnBPKS = 0;
+                                
+                                try {
+                                    const intersection = turf.intersect(poly, bpksPoly);
+                                    if (intersection) {
+                                        areaEnBPKS = turf.area(intersection) / 1000000; // m² a km²
+                                        areaTotal += areaEnBPKS;
+                                    }
+                                } catch (e) {
+                                    console.warn('No se pudo calcular intersección:', e);
+                                }
+                                
+                                socioBosqueEnBPKS.push({
+                                    ...sb,
+                                    area_en_bpks: areaEnBPKS
+                                });
+                                
+                                L.geoJSON(geom, {
+                                    style: { fillColor: '#4a7c59', weight: 2, color: '#27ae60', fillOpacity: 0.5 }
+                                }).addTo(highlightLayer);
+                            }
+                        } catch (e) {
+                            console.error('Error procesando Socio Bosque:', e);
+                        }
+                    }
+                });
+
+                let html = `<div class="result-item"><strong>Total Áreas Socio Bosque en BPCS:</strong> ${socioBosqueEnBPKS.length}</div>`;
+                html += `<div class="result-item"><strong>Área Total en BPCS:</strong> ${areaTotal.toFixed(2)} km²</div>`;
+                html += '<div style="max-height:250px;overflow-y:auto;margin-top:1rem;">';
+                socioBosqueEnBPKS.forEach((sb, i) => {
+                    html += `<div class="result-item">`;
+                    html += `${i+1}. <strong>${sb.nam || 'Sin nombre'}</strong><br>`;
+                    html += `Tipo: ${sb.tpcnv || 'N/A'}<br>`;
+                    html += `Área en BPCS: ${sb.area_en_bpks.toFixed(2)} km²`;
+                    html += `</div>`;
+                });
+                html += '</div>';
+
+                mostrarResultados('Socio Bosque dentro del BPCS', html);
+            } catch (error) {
+                console.error('Error en consulta 6:', error);
+                mostrarResultados('Error', `<div class="result-item">Error: ${error.message}</div>`);
+            }
+        }
+
+        function mostrarLoading() {
+            document.getElementById('resultsPanel').classList.add('show');
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('resultsContent').innerHTML = '';
+        }
+
+        function mostrarResultados(titulo, contenido) {
+            document.getElementById('resultsTitle').textContent = titulo;
+            document.getElementById('loading').classList.remove('show');
+            document.getElementById('resultsContent').innerHTML = contenido;
+        }
+
+        function cerrarResultados() {
+            document.getElementById('resultsPanel').classList.remove('show');
+            if (highlightLayer) map.removeLayer(highlightLayer);
+        }
+
+        cargarCapa('BPKS', 'bpks_ms_geo', '#2d5f4c', 'polygon', ['nombre', 'ubicacion', 'area_ha']).then(l => l.addTo(map));
+        cargarCapa('Comunidades Punto', 'comunidades_bpks_geo', '#87CEEB', 'point', ['Name', 'Etnia', 'Canton', 'Parroquia']).then(l => l.addTo(map));
+    </script>
+</body>
+</html>
